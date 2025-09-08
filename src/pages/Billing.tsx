@@ -1,4 +1,5 @@
-import { useState } from "react";
+// src/components/Billing.tsx
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,40 +9,119 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { ProductCard, CartSummary } from "@/components/BillingComponents";
 import { generateBillPDF, BillData } from "@/utils/pdfGenerator";
-import { demoProducts, categories, Product } from "@/data/products";
-import { Search, ShoppingCart, Printer, Download, FileText } from "lucide-react";
+import { categories } from "@/data/products";
+import { Search, ShoppingCart, Printer, Download } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-
-interface CartItem {
-  product: Product;
-  quantity: number;
-}
+import { useAuth } from "@/contexts/AuthContext";
+import type { Product, CartItem } from "@/types/billing";
 
 const Billing = () => {
+  const { isAuthenticated } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [sections, setSections] = useState({
     client: true,
     kitchen: false,
-    stock: false
+    stock: false,
   });
   const [paymentType, setPaymentType] = useState("cash");
   const [taxRate, setTaxRate] = useState(0.1); // 10% default
   const [isEditingTax, setIsEditingTax] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredProducts = demoProducts.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
+  // 🆕 stock state
+  const [stockData, setStockData] = useState<Record<string, number>>({});
+
+  const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+
+  // Fetch products on mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      if (!isAuthenticated) return;
+
+      setLoading(true);
+      try {
+        const accessToken = localStorage.getItem("accessToken");
+        const response = await fetch(`${API_BASE_URL}/products/`, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) throw new Error("Failed to fetch products");
+        const data = await response.json();
+        // Map backend data to match Product interface
+        const formattedProducts: Product[] = data.map((item: any) => ({
+          id: item.id.toString(),
+          name: item.name,
+          price: parseFloat(item.price),
+          category: item.category,
+          active: true,
+          sku: item.name.toLowerCase().replace(/\s+/g, "-"),
+        }));
+        setProducts(formattedProducts);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, [isAuthenticated]);
+
+  // 🆕 Fetch stock data
+  useEffect(() => {
+    const fetchStock = async () => {
+      if (!isAuthenticated) return;
+      try {
+        const accessToken = localStorage.getItem("accessToken");
+        const today = new Date().toISOString().split("T")[0];
+        const response = await fetch(`${API_BASE_URL}/stocks/?date=${today}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!response.ok) throw new Error("Failed to fetch stock data");
+        const data = await response.json();
+
+        const stockMap: Record<string, number> = {};
+        data.forEach((item: any) => {
+          stockMap[item.product.id] =
+            item.starting_stock + item.added_stock - item.sold_quantity;
+        });
+        setStockData(stockMap);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    };
+
+    fetchStock();
+  }, [isAuthenticated]);
+
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch =
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory =
+      selectedCategory === "All" || product.category === selectedCategory;
     return matchesSearch && matchesCategory && product.active;
   });
 
   const addToCart = (product: Product) => {
-    setCart(prevCart => {
-      const existingItem = prevCart.find(item => item.product.id === product.id);
+    setCart((prevCart) => {
+      const existingItem = prevCart.find(
+        (item) => item.product.id === product.id
+      );
       if (existingItem) {
-        return prevCart.map(item =>
+        return prevCart.map((item) =>
           item.product.id === product.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
@@ -52,22 +132,29 @@ const Billing = () => {
   };
 
   const updateQuantity = (productId: string, change: number) => {
-    setCart(prevCart => {
-      return prevCart.map(item => {
-        if (item.product.id === productId) {
-          const newQuantity = Math.max(0, item.quantity + change);
-          return newQuantity > 0 ? { ...item, quantity: newQuantity } : null;
-        }
-        return item;
-      }).filter(Boolean) as CartItem[];
+    setCart((prevCart) => {
+      return prevCart
+        .map((item) => {
+          if (item.product.id === productId) {
+            const newQuantity = Math.max(0, item.quantity + change);
+            return newQuantity > 0 ? { ...item, quantity: newQuantity } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[];
     });
   };
 
   const removeFromCart = (productId: string) => {
-    setCart(prevCart => prevCart.filter(item => item.product.id !== productId));
+    setCart((prevCart) =>
+      prevCart.filter((item) => item.product.id !== productId)
+    );
   };
 
-  const subtotal = cart.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+  const subtotal = cart.reduce(
+    (total, item) => total + item.product.price * item.quantity,
+    0
+  );
   const tax = subtotal * taxRate;
   const total = subtotal + tax;
 
@@ -83,18 +170,17 @@ const Billing = () => {
 
     const selectedSections = Object.entries(sections)
       .filter(([_, selected]) => selected)
-      .map(([section, _]) => section);
+      .map(([section]) => section);
 
-    // Generate PDF
     const billData: BillData = {
-      items: cart.map(item => ({
+      items: cart.map((item) => ({
         product: {
           id: item.product.id,
           name: item.product.name,
           price: item.product.price,
-          sku: item.product.sku
+          sku: item.product.sku,
         },
-        quantity: item.quantity
+        quantity: item.quantity,
       })),
       subtotal,
       tax,
@@ -103,22 +189,19 @@ const Billing = () => {
       paymentMethod: paymentType,
       billNumber: `SPOT-${Date.now()}`,
       date: new Date().toLocaleDateString(),
-      cashier: "Admin User"
+      cashier: "Admin User",
     };
 
     try {
       await generateBillPDF(billData);
-      
-      // Simulate printing to multiple printers
       printToMultiplePrinters(cart, selectedSections);
-      
-      // Reset cart after successful billing
       setCart([]);
       setSections({ client: true, kitchen: false, stock: false });
-      
       toast({
         title: "Bill created successfully!",
-        description: `PDF generated and order sent to: ${selectedSections.join(', ')}`,
+        description: `PDF generated and order sent to: ${selectedSections.join(
+          ", "
+        )}`,
       });
     } catch (error) {
       toast({
@@ -130,8 +213,7 @@ const Billing = () => {
   };
 
   const printToMultiplePrinters = (billItems: CartItem[], sections: string[]) => {
-    sections.forEach(section => {
-      // Simulate printer communication
+    sections.forEach((section) => {
       setTimeout(() => {
         toast({
           title: `✅ ${section.charAt(0).toUpperCase() + section.slice(1)} Printer`,
@@ -163,16 +245,18 @@ const Billing = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
+              disabled={loading}
             />
           </div>
-          
+
           <div className="flex flex-wrap gap-2">
-            {categories.map(category => (
+            {categories.map((category) => (
               <Button
                 key={category}
                 variant={selectedCategory === category ? "default" : "outline"}
                 size="sm"
                 onClick={() => setSelectedCategory(category)}
+                disabled={loading}
               >
                 {category}
               </Button>
@@ -182,13 +266,22 @@ const Billing = () => {
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredProducts.map(product => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onAddToCart={addToCart}
-            />
-          ))}
+          {loading ? (
+            <p>Loading products...</p>
+          ) : filteredProducts.length === 0 ? (
+            <p>No products found.</p>
+          ) : (
+            filteredProducts.map((product) => (
+              <ProductCard
+                key={product.id}
+                product={{
+                  ...product,
+                  stock: stockData[product.id] ?? undefined, // 🆕 include stock
+                }}
+                onAddToCart={addToCart}
+              />
+            ))
+          )}
         </div>
       </div>
 
@@ -202,14 +295,14 @@ const Billing = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6 bg-white/50 backdrop-blur-sm rounded-b-xl">
-            <CartSummary 
+            <CartSummary
               cart={cart}
               subtotal={subtotal}
               tax={tax}
               taxRate={taxRate}
               total={total}
               onUpdateQuantity={updateQuantity}
-              onEditTax={setTaxRate}
+              onEditTax={(newRate: number) => setTaxRate(newRate)}
               isEditingTax={isEditingTax}
               onToggleEditTax={() => setIsEditingTax(!isEditingTax)}
             />
@@ -221,16 +314,22 @@ const Billing = () => {
               <Label className="text-sm font-medium">Send receipt to:</Label>
               <div className="grid grid-cols-1 gap-2">
                 {Object.entries(sections).map(([section, checked]) => (
-                  <div key={section} className="flex items-center space-x-2 p-2 rounded-lg hover:bg-accent/50 transition-colors">
+                  <div
+                    key={section}
+                    className="flex items-center space-x-2 p-2 rounded-lg hover:bg-accent/50 transition-colors"
+                  >
                     <Checkbox
                       id={section}
                       checked={checked}
-                      onCheckedChange={(checked) => 
-                        setSections(prev => ({ ...prev, [section]: !!checked }))
+                      onCheckedChange={(checked) =>
+                        setSections((prev) => ({ ...prev, [section]: !!checked }))
                       }
                     />
-                    <Label htmlFor={section} className="text-sm capitalize cursor-pointer flex-1">
-                      {section === 'client' ? 'Customer Receipt' : section}
+                    <Label
+                      htmlFor={section}
+                      className="text-sm capitalize cursor-pointer flex-1"
+                    >
+                      {section === "client" ? "Customer Receipt" : section}
                     </Label>
                   </div>
                 ))}
@@ -242,14 +341,22 @@ const Billing = () => {
             {/* Payment Type */}
             <div className="space-y-3">
               <Label className="text-sm font-medium">Payment Method:</Label>
-              <RadioGroup value={paymentType} onValueChange={setPaymentType} className="grid grid-cols-2 gap-2">
+              <RadioGroup
+                value={paymentType}
+                onValueChange={setPaymentType}
+                className="grid grid-cols-2 gap-2"
+              >
                 <div className="flex items-center space-x-2 p-2 rounded-lg hover:bg-accent/50 transition-colors">
                   <RadioGroupItem value="cash" id="cash" />
-                  <Label htmlFor="cash" className="text-sm cursor-pointer">Cash</Label>
+                  <Label htmlFor="cash" className="text-sm cursor-pointer">
+                    Cash
+                  </Label>
                 </div>
                 <div className="flex items-center space-x-2 p-2 rounded-lg hover:bg-accent/50 transition-colors">
                   <RadioGroupItem value="card" id="card" />
-                  <Label htmlFor="card" className="text-sm cursor-pointer">Visa/Card</Label>
+                  <Label htmlFor="card" className="text-sm cursor-pointer">
+                    Visa/Card
+                  </Label>
                 </div>
               </RadioGroup>
             </div>
@@ -258,7 +365,7 @@ const Billing = () => {
               <Button
                 variant="outline"
                 onClick={handleCreateBill}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || loading}
                 className="hover-lift border-2 border-primary/30 hover:bg-primary/5"
               >
                 <Printer className="h-4 w-4 mr-2" />
@@ -266,7 +373,7 @@ const Billing = () => {
               </Button>
               <Button
                 onClick={handleCreateBill}
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || loading}
                 className="btn-professional hover-glow"
               >
                 <Download className="h-4 w-4 mr-2" />

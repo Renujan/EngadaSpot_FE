@@ -351,7 +351,12 @@ const Products = () => {
                   <TableRow key={product.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <img src={product.image} alt={product.name} className="h-12 w-12 rounded-lg object-cover" onError={(e)=>{e.currentTarget.src="/placeholder-product.jpg"}} />
+                        <img 
+                          src={product.image.startsWith('http') ? product.image : `${API_BASE_URL.replace('/api', '')}${product.image}`} 
+                          alt={product.name} 
+                          className="h-12 w-12 rounded-lg object-cover" 
+                          onError={(e)=>{e.currentTarget.src="/placeholder-product.jpg"}} 
+                        />
                         <div><div className="font-medium">{product.name}</div></div>
                       </div>
                     </TableCell>
