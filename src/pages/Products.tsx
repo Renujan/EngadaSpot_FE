@@ -53,7 +53,7 @@ interface Product {
   total_sold: number;
 }
 
-const categories = ["All", "Beverages", "Desserts", "Main Dishes", "Appetizers"];
+const categories = ["All", "Beverages", "Desserts", "Main Dishes", "Snacks"];
 const stockTypes = ["on_demand", "daily_stock"];
 
 const Products = () => {

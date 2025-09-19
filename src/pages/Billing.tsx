@@ -15,6 +15,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import type { Product, CartItem } from "@/types/billing";
 
+
 const Billing = () => {
   const { isAuthenticated } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
@@ -51,7 +52,7 @@ const Billing = () => {
         });
         if (!response.ok) throw new Error("Failed to fetch products");
         const data = await response.json();
-        // Map backend data to match Product interface
+        // Map backend data to match Product interface, including full image URL
         const formattedProducts: Product[] = data.map((item: any) => ({
           id: item.id.toString(),
           name: item.name,
@@ -59,6 +60,7 @@ const Billing = () => {
           category: item.category,
           active: true,
           sku: item.name.toLowerCase().replace(/\s+/g, "-"),
+          image: item.image ? `${API_BASE_URL.replace('/api', '')}${item.image}` : undefined, // Prepend base URL to image path
         }));
         setProducts(formattedProducts);
       } catch (error: any) {

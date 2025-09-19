@@ -1,3 +1,4 @@
+// src/components/BillingComponents.tsx
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ interface ProductCardProps {
 }
 
 export const ProductCard = ({ product, onAddToCart }: ProductCardProps) => {
-  // Get real food images from Unsplash with proper food-related search terms ...
+  // Get real food images from Unsplash with proper food-related search terms
   const getFoodImage = (productName: string, category: string) => {
     const foodImageMap = {
       'Masala Chai': 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=400&h=400&fit=crop&auto=format&q=80',
@@ -44,16 +45,19 @@ export const ProductCard = ({ product, onAddToCart }: ProductCardProps) => {
            `https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400&h=400&fit=crop&auto=format&q=80`;
   };
 
+  // Use server-provided image if available, else fallback to getFoodImage or placeholder
+  const imageSrc = product.image || getFoodImage(product.name, product.category);
+
   return (
     <Card className="card-hover group border-0 shadow-lg bg-gradient-card">
       <CardContent className="p-0">
         <div className="aspect-square bg-gradient-subtle rounded-t-xl overflow-hidden relative">
           <img
-            src={getFoodImage(product.name, product.category)}
+            src={imageSrc}
             alt={product.name}
             className="w-full h-full object-cover transition-all duration-500 group-hover:scale-110 group-hover:rotate-1"
             onError={(e) => {
-              e.currentTarget.src = "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400&h=400&fit=crop&auto=format&q=80";
+              e.currentTarget.src = "/placeholder.png"; // Fallback to local placeholder
             }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300" />
@@ -64,44 +68,44 @@ export const ProductCard = ({ product, onAddToCart }: ProductCardProps) => {
           </div>
         </div>
         
-        <div className="p-4">`
-        
-        <div className="space-y-3">
-          <div>
-            <h3 className="font-semibold text-sm leading-tight text-foreground group-hover:text-primary transition-colors">
-              {product.name}
-            </h3>
-            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-              {product.description}
-            </p>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-primary text-lg">Rs. {product.price}</span>
-            <Badge 
-              variant={product.stock > 10 ? "secondary" : product.stock > 0 ? "outline" : "destructive"} 
-              className="text-xs"
+        <div className="p-4">
+          <div className="space-y-3">
+            <div>
+              <h3 className="font-semibold text-sm leading-tight text-foreground group-hover:text-primary transition-colors">
+                {product.name}
+              </h3>
+              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                {product.description}
+              </p>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-primary text-lg">Rs. {product.price}</span>
+              <Badge 
+                variant={product.stock > 10 ? "secondary" : product.stock > 0 ? "outline" : "destructive"} 
+                className="text-xs"
+              >
+                Stock: {product.stock}
+              </Badge>
+            </div>
+            
+            <Button
+              size="sm"
+              className="w-full btn-professional group-hover:scale-105 transition-all duration-200"
+              onClick={() => onAddToCart(product)}
+              disabled={product.stock === 0}
             >
-              Stock: {product.stock}
-            </Badge>
+              <Package className="h-4 w-4 mr-2" />
+              {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
+            </Button>
           </div>
-          
-          <Button
-            size="sm"
-            className="w-full btn-professional group-hover:scale-105 transition-all duration-200"
-            onClick={() => onAddToCart(product)}
-            disabled={product.stock === 0}
-          >
-            <Package className="h-4 w-4 mr-2" />
-            {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
-          </Button>
-        </div>
         </div>
       </CardContent>
     </Card>
   );
 };
 
+// CartSummary component remains unchanged
 interface CartSummaryProps {
   cart: CartItem[];
   subtotal: number;
