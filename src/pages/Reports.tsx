@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, Download, FileText, DollarSign, TrendingUp, Users, Calendar } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { apiRequest } from "@/lib/api";
 
 interface SalesReport {
   date: string;
@@ -32,41 +33,78 @@ const Reports = () => {
     to: format(new Date(), 'yyyy-MM-dd')
   });
   const [reportType, setReportType] = useState('sales');
+  const [salesData, setSalesData] = useState<SalesReport[]>([]);
+  const [productData, setProductData] = useState<ProductReport[]>([]);
+  const [recentBills, setRecentBills] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  // Mock data
-  const salesData: SalesReport[] = [
-    { date: '2024-01-01', totalSales: 45680, totalOrders: 127, averageOrder: 360, paymentMethod: 'cash' },
-    { date: '2024-01-02', totalSales: 52300, totalOrders: 145, averageOrder: 361, paymentMethod: 'card' },
-    { date: '2024-01-03', totalSales: 38950, totalOrders: 108, averageOrder: 361, paymentMethod: 'cash' },
-    { date: '2024-01-04', totalSales: 61200, totalOrders: 169, averageOrder: 362, paymentMethod: 'card' },
-    { date: '2024-01-05', totalSales: 49750, totalOrders: 138, averageOrder: 360, paymentMethod: 'cash' },
-    { date: '2024-01-06', totalSales: 71500, totalOrders: 198, averageOrder: 361, paymentMethod: 'card' },
-    { date: '2024-01-07', totalSales: 58300, totalOrders: 162, averageOrder: 360, paymentMethod: 'cash' },
-  ];
+  // Fetch all reports when date range changes
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch sales report
+        const salesResponse = await apiRequest(
+          `/reports/sales/?from_date=${dateRange.from}&to_date=${dateRange.to}`
+        );
+        if (salesResponse.ok) {
+          const salesData = await salesResponse.json();
+          setSalesData(salesData);
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to fetch sales report",
+            variant: "destructive",
+          });
+        }
 
-  const productData: ProductReport[] = [
-    { productName: 'Chicken Biryani', unitsSold: 89, revenue: 57850, category: 'Main Dishes' },
-    { productName: 'Masala Chai', unitsSold: 234, revenue: 42120, category: 'Beverages' },
-    { productName: 'Vegetable Samosa', unitsSold: 156, revenue: 13260, category: 'Snacks' },
-    { productName: 'Fish Curry', unitsSold: 67, revenue: 50250, category: 'Main Dishes' },
-    { productName: 'Chicken Roll', unitsSold: 78, revenue: 17160, category: 'Snacks' },
-    { productName: 'Coconut Rice', unitsSold: 92, revenue: 25760, category: 'Rice' },
-    { productName: 'Fresh Lime Juice', unitsSold: 145, revenue: 17400, category: 'Beverages' },
-    { productName: 'Watalappam', unitsSold: 43, revenue: 13760, category: 'Desserts' },
-  ];
+        // Fetch product report
+        const productResponse = await apiRequest(
+          `/reports/products/?from_date=${dateRange.from}&to_date=${dateRange.to}`
+        );
+        if (productResponse.ok) {
+          const productData = await productResponse.json();
+          setProductData(productData);
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to fetch product report",
+            variant: "destructive",
+          });
+        }
 
-  const recentBills = [
-    { billId: 'BILL001', date: '2024-01-07', amount: 1450, items: 4, paymentMethod: 'cash', status: 'completed' },
-    { billId: 'BILL002', date: '2024-01-07', amount: 780, items: 2, paymentMethod: 'card', status: 'completed' },
-    { billId: 'BILL003', date: '2024-01-07', amount: 2150, items: 6, paymentMethod: 'card', status: 'completed' },
-    { billId: 'BILL004', date: '2024-01-07', amount: 650, items: 3, paymentMethod: 'cash', status: 'completed' },
-    { billId: 'BILL005', date: '2024-01-07', amount: 920, items: 2, paymentMethod: 'card', status: 'completed' },
-  ];
+        // Fetch recent transactions (doesn't depend on date range)
+        const transactionsResponse = await apiRequest('/reports/transactions/?limit=50');
+        if (transactionsResponse.ok) {
+          const transactionsData = await transactionsResponse.json();
+          setRecentBills(transactionsData);
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to fetch recent transactions",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch reports",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    fetchReports();
+  }, [dateRange.from, dateRange.to]);
+
+  // Calculate summary statistics
   const totalSales = salesData.reduce((sum, day) => sum + day.totalSales, 0);
   const totalOrders = salesData.reduce((sum, day) => sum + day.totalOrders, 0);
-  const averageOrderValue = totalSales / totalOrders;
-  const topProduct = productData.sort((a, b) => b.revenue - a.revenue)[0];
+  const averageOrderValue = totalSales / totalOrders || 0;
+  const topProduct = productData.length > 0 ? productData[0] : null;
 
   const exportToCSV = (data: any[], filename: string) => {
     const csvContent = [
@@ -88,12 +126,86 @@ const Reports = () => {
     });
   };
 
-  const exportToPDF = (reportType: string) => {
-    // Simulate PDF generation
+  const exportToPDF = async (reportType: string) => {
+    try {
+      // Build query parameters
+      const params = new URLSearchParams({
+        report_type: reportType,
+      });
+
+      // Add date range for sales and products reports
+      if (reportType === 'sales' || reportType === 'products') {
+        params.append('from_date', dateRange.from);
+        params.append('to_date', dateRange.to);
+      } else if (reportType === 'transactions') {
+        params.append('limit', '50');
+      }
+
+      const response = await apiRequest(`/reports/export-pdf/?${params.toString()}`);
+      
+      if (response.ok) {
+        // Check if response is actually a PDF
+        const contentType = response.headers.get('Content-Type');
+        if (contentType && contentType.includes('application/pdf')) {
+          // Get the blob from response
+          const blob = await response.blob();
+          
+          // Create download link
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          
+          // Get filename from Content-Disposition header or use default
+          const contentDisposition = response.headers.get('Content-Disposition');
+          let filename = `${reportType}_report_${new Date().toISOString().split('T')[0]}.pdf`;
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+            if (filenameMatch) {
+              filename = filenameMatch[1];
+            }
+          }
+          
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+
+          toast({
+            title: "PDF Export Successful",
+            description: `${reportType} report PDF has been downloaded`,
+          });
+        } else {
+          // Try to parse as JSON error
+          const errorData = await response.json().catch(() => ({}));
+          toast({
+            title: "Export Failed",
+            description: errorData.detail || "Invalid response from server",
+            variant: "destructive",
+          });
+        }
+      } else {
+        // Try to get error message, but handle non-JSON responses
+        let errorMessage = "Failed to export PDF";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          errorMessage = `Server returned ${response.status}: ${response.statusText}`;
+        }
+        toast({
+          title: "Export Failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
     toast({
-      title: "PDF Export",
-      description: `${reportType} report PDF generation started`,
+        title: "Export Failed",
+        description: "An error occurred while exporting PDF",
+        variant: "destructive",
     });
+    }
   };
 
   return (
@@ -110,11 +222,25 @@ const Reports = () => {
         </div>
         
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => exportToCSV(salesData, 'sales-report')}>
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              const data = reportType === 'sales' ? salesData : reportType === 'products' ? productData : recentBills;
+              const filename = `${reportType}-report`;
+              exportToCSV(data, filename);
+            }}
+            disabled={loading}
+          >
             <Download className="h-4 w-4 mr-2" />
             Export CSV
           </Button>
-          <Button onClick={() => exportToPDF('sales')}>
+          <Button 
+            onClick={() => {
+              const type = reportType === 'payments' ? 'transactions' : reportType;
+              exportToPDF(type);
+            }}
+            disabled={loading}
+          >
             <FileText className="h-4 w-4 mr-2" />
             Export PDF
           </Button>
@@ -162,8 +288,8 @@ const Reports = () => {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{topProduct?.productName}</div>
-            <p className="text-xs text-muted-foreground">Rs. {topProduct?.revenue.toLocaleString()} revenue</p>
+            <div className="text-2xl font-bold">{topProduct?.productName || 'N/A'}</div>
+            <p className="text-xs text-muted-foreground">Rs. {topProduct?.revenue.toLocaleString() || 0} revenue</p>
           </CardContent>
         </Card>
       </div>
@@ -180,6 +306,7 @@ const Reports = () => {
                 value={dateRange.from}
                 onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
                 className="w-40"
+                disabled={loading}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -190,11 +317,12 @@ const Reports = () => {
                 value={dateRange.to}
                 onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
                 className="w-40"
+                disabled={loading}
               />
             </div>
             <div className="flex items-center gap-2">
               <Label htmlFor="report-type">Report Type:</Label>
-              <Select value={reportType} onValueChange={setReportType}>
+              <Select value={reportType} onValueChange={setReportType} disabled={loading}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -205,6 +333,9 @@ const Reports = () => {
                 </SelectContent>
               </Select>
             </div>
+            {loading && (
+              <div className="text-sm text-muted-foreground">Loading...</div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -218,8 +349,12 @@ const Reports = () => {
 
         <TabsContent value="sales">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Daily Sales Report</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('sales')} disabled={loading}>
+                <FileText className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
@@ -234,7 +369,20 @@ const Reports = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesData.map((day, index) => (
+                    {loading && salesData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8">
+                          Loading sales data...
+                        </TableCell>
+                      </TableRow>
+                    ) : salesData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No sales data available for the selected date range
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      salesData.map((day, index) => (
                       <TableRow key={index}>
                         <TableCell>{format(new Date(day.date), 'PPP')}</TableCell>
                         <TableCell className="font-semibold">Rs. {day.totalSales.toLocaleString()}</TableCell>
@@ -246,7 +394,8 @@ const Reports = () => {
                           </Badge>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -256,8 +405,12 @@ const Reports = () => {
 
         <TabsContent value="products">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Product Performance</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('products')} disabled={loading}>
+                <FileText className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
@@ -272,7 +425,20 @@ const Reports = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {productData.sort((a, b) => b.revenue - a.revenue).map((product, index) => (
+                    {loading && productData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8">
+                          Loading product data...
+                        </TableCell>
+                      </TableRow>
+                    ) : productData.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          No product data available for the selected date range
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      productData.map((product, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{product.productName}</TableCell>
                         <TableCell>{product.category}</TableCell>
@@ -284,7 +450,8 @@ const Reports = () => {
                           </Badge>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -294,8 +461,12 @@ const Reports = () => {
 
         <TabsContent value="transactions">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Recent Transactions</CardTitle>
+              <Button variant="outline" size="sm" onClick={() => exportToPDF('transactions')} disabled={loading}>
+                <FileText className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
@@ -311,7 +482,20 @@ const Reports = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {recentBills.map((bill, index) => (
+                    {loading && recentBills.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8">
+                          Loading transactions...
+                        </TableCell>
+                      </TableRow>
+                    ) : recentBills.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No recent transactions found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      recentBills.map((bill, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-mono">{bill.billId}</TableCell>
                         <TableCell>{format(new Date(bill.date), 'PPp')}</TableCell>
@@ -328,7 +512,8 @@ const Reports = () => {
                           </Badge>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
