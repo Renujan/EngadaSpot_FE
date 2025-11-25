@@ -4,9 +4,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Package, AlertTriangle, Plus, Edit3, Calendar } from "lucide-react";
+import { Package, AlertTriangle, Plus, Edit3, Calendar, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
@@ -64,10 +75,21 @@ const Stock = () => {
   setLoading(true);
   try {
     const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      toast({ 
+        title: "Authentication required", 
+        description: "Please log in to view products", 
+        variant: "destructive" 
+      });
+      return;
+    }
     const res = await fetch(`${API_BASE_URL}/products/?date=${selectedDate}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    if (!res.ok) throw new Error("Failed to fetch products for selected date");
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.detail || "Failed to fetch products for selected date");
+    }
     const data = await res.json();
     const mapped: Product[] = data.map((entry: any) => ({
   id: String(entry.id),
@@ -75,8 +97,15 @@ const Stock = () => {
 }));
 
     setProducts(mapped);
+    if (mapped.length === 0) {
+      toast({ 
+        title: "No products found", 
+        description: `No products available for ${selectedDate}. Please add products first.`,
+        variant: "destructive" 
+      });
+    }
   } catch (err: any) {
-    toast({ title: "Error", description: err.message, variant: "destructive" });
+    toast({ title: "Error loading products", description: err.message, variant: "destructive" });
   } finally {
     setLoading(false);
   }
@@ -86,11 +115,22 @@ const Stock = () => {
     setLoading(true);
     try {
       const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) {
+        toast({ 
+          title: "Authentication required", 
+          description: "Please log in to view stock entries", 
+          variant: "destructive" 
+        });
+        return;
+      }
       // Backend list endpoint doesn't filter by date; we filter client-side.
       const res = await fetch(`${API_BASE_URL}/stocks/?date=${selectedDate}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!res.ok) throw new Error("Failed to fetch stock entries");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to fetch stock entries");
+      }
       const data = await res.json();
       const filtered = (Array.isArray(data) ? data : [])
         .filter((e: any) => e.stock_date === selectedDate)
@@ -106,8 +146,14 @@ const Stock = () => {
           })
         );
       setStockEntries(filtered);
+      if (filtered.length === 0) {
+        toast({ 
+          title: "No stock entries", 
+          description: `No stock entries found for ${selectedDate}. Add stock entries to get started.`,
+        });
+      }
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: "Error loading stock", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -117,14 +163,18 @@ const Stock = () => {
     setLoading(true);
     try {
       const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) return;
       const res = await fetch(`${API_BASE_URL}/stocks/summary/?date=${selectedDate}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!res.ok) throw new Error("Failed to fetch stock summary");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to fetch stock summary");
+      }
       const data = await res.json();
       setStockSummary(data);
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({ title: "Error loading summary", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -189,7 +239,10 @@ const Stock = () => {
       }
       setFormData({ productId: "", starting_stock: "", added_stock: "", low_stock_threshold: "" });
       setIsAddDialogOpen(false);
-      toast({ title: "Stock added", description: `Stock added for ${newEntry.product.name}` });
+      toast({ 
+        title: "Stock added successfully", 
+        description: `Stock entry created for ${newEntry.product.name} on ${selectedDate}` 
+      });
       fetchStockSummary();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -233,7 +286,10 @@ const Stock = () => {
             : entry
         )
       );
-      toast({ title: "Stock updated", description: "Added stock updated successfully" });
+      toast({ 
+        title: "Stock updated successfully", 
+        description: `Stock entry for ${updatedEntry.product.name} has been updated` 
+      });
       setIsAddDialogOpen(false);
       setEditingEntry(null);
       fetchStockSummary();
@@ -253,9 +309,16 @@ const Stock = () => {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!res.ok) throw new Error("Failed to delete stock entry");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to delete stock entry");
+      }
+      const deletedEntry = stockEntries.find(e => e.id === id);
       setStockEntries((prev) => prev.filter((entry) => entry.id !== id));
-      toast({ title: "Stock deleted", description: "Stock entry deleted" });
+      toast({ 
+        title: "Stock deleted successfully", 
+        description: deletedEntry ? `Stock entry for ${deletedEntry.product.name} has been removed` : "Stock entry deleted" 
+      });
       fetchStockSummary();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -466,12 +529,35 @@ const Stock = () => {
                         <TableCell className={isLow ? "text-red-600 font-bold" : ""}>{remaining}</TableCell>
                         <TableCell>{entry.low_stock_threshold}</TableCell>
                         <TableCell className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openEditDialog(entry)}>
+                          <Button variant="outline" size="sm" onClick={() => openEditDialog(entry)} disabled={loading}>
                             <Edit3 className="h-4 w-4" />
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => deleteStockEntry(entry.id)}>
-                            Delete
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="sm" disabled={loading}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="bg-white">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Stock Entry</AlertDialogTitle>
+                                <AlertDialogDescription className="text-gray-600">
+                                  Are you sure you want to delete the stock entry for "{entry.product.name}" on {format(new Date(entry.stock_date), "PPP")}? 
+                                  This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel disabled={loading} className="border-gray-300">Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => deleteStockEntry(entry.id)} 
+                                  disabled={loading} 
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     );

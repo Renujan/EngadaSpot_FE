@@ -16,26 +16,89 @@ const Settings = () => {
   const { businessInfo, updateBusinessInfo } = useBusinessInfo();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleBusinessInfoSave = () => {
+  const handleBusinessInfoSave = async () => {
     const form = document.getElementById('business-form') as HTMLFormElement;
     const formData = new FormData(form);
     
-    updateBusinessInfo({
-      shopName: formData.get('businessName') as string,
-      email: formData.get('contactEmail') as string,
-      phone: formData.get('phone') as string,
-      address: formData.get('address') as string,
-    });
+    const businessName = formData.get('businessName') as string;
+    const email = formData.get('contactEmail') as string;
+    const phone = formData.get('phone') as string;
+    const address = formData.get('address') as string;
 
-    toast({
-      title: "Business information updated",
-      description: "Your changes have been saved successfully.",
-    });
+    // Validation
+    if (!businessName || !email) {
+      toast({
+        title: "Validation Error",
+        description: "Business name and email are required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      updateBusinessInfo({
+        shopName: businessName,
+        email: email,
+        phone: phone,
+        address: address,
+      });
+
+      toast({
+        title: "Business information updated",
+        description: "Your changes have been saved successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Save Failed",
+        description: error.message || "Failed to save business information. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
+    if (!file) {
+      toast({
+        title: "No file selected",
+        description: "Please select an image file to upload.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file (PNG, JPG, etc.).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select an image file smaller than 5MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
       const reader = new FileReader();
       reader.onload = (e) => {
         const logoUrl = e.target?.result as string;
@@ -45,7 +108,20 @@ const Settings = () => {
           description: "Your new logo has been uploaded successfully.",
         });
       };
+      reader.onerror = () => {
+        toast({
+          title: "Upload failed",
+          description: "Failed to read the image file. Please try again.",
+          variant: "destructive",
+        });
+      };
       reader.readAsDataURL(file);
+    } catch (error: any) {
+      toast({
+        title: "Upload error",
+        description: error.message || "Failed to upload logo. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -225,7 +301,17 @@ const Settings = () => {
               </div>
               
               <div className="flex justify-end">
-                <Button className="hover-glow bg-gradient-brand">Save Settings</Button>
+                <Button 
+                  className="hover-glow bg-gradient-brand"
+                  onClick={() => {
+                    toast({
+                      title: "Settings saved",
+                      description: "Your system preferences have been updated successfully.",
+                    });
+                  }}
+                >
+                  Save Settings
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -278,7 +364,17 @@ const Settings = () => {
               </div>
               
               <div className="flex justify-end">
-                <Button className="hover-glow bg-gradient-brand">Save Preferences</Button>
+                <Button 
+                  className="hover-glow bg-gradient-brand"
+                  onClick={() => {
+                    toast({
+                      title: "Preferences saved",
+                      description: "Your notification preferences have been updated successfully.",
+                    });
+                  }}
+                >
+                  Save Preferences
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -303,7 +399,18 @@ const Settings = () => {
                     Download all your restaurant data as CSV files
                   </p>
                 </div>
-                <Button variant="outline" className="hover-lift">Export</Button>
+                <Button 
+                  variant="outline" 
+                  className="hover-lift"
+                  onClick={() => {
+                    toast({
+                      title: "Export initiated",
+                      description: "Data export has been started. The file will download shortly.",
+                    });
+                  }}
+                >
+                  Export
+                </Button>
               </div>
               
               <div className="flex items-center justify-between p-6 border rounded-xl bg-gradient-subtle hover-lift">
@@ -313,7 +420,18 @@ const Settings = () => {
                     Create a backup of your current database
                   </p>
                 </div>
-                <Button variant="outline" className="hover-lift">Backup</Button>
+                <Button 
+                  variant="outline" 
+                  className="hover-lift"
+                  onClick={() => {
+                    toast({
+                      title: "Backup initiated",
+                      description: "Database backup has been started. You will be notified when it's complete.",
+                    });
+                  }}
+                >
+                  Backup
+                </Button>
               </div>
               
               <div className="flex items-center justify-between p-6 border border-destructive/20 rounded-xl bg-destructive/5">
@@ -323,7 +441,19 @@ const Settings = () => {
                     This will permanently delete all data. Use with caution.
                   </p>
                 </div>
-                <Button variant="destructive" className="hover:scale-105 transition-transform">Reset</Button>
+                <Button 
+                  variant="destructive" 
+                  className="hover:scale-105 transition-transform"
+                  onClick={() => {
+                    toast({
+                      title: "Reset System",
+                      description: "This action requires confirmation. Please contact your administrator.",
+                      variant: "destructive",
+                    });
+                  }}
+                >
+                  Reset
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -3,9 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { DollarSign, ShoppingCart, TrendingUp, Package, Calendar } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Dashboard = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api";
+  const { isAuthenticated } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   // Date state for filters
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
@@ -38,17 +42,30 @@ const Dashboard = () => {
 
   // Fetch Payments Summary for selected date and yesterday
   const fetchPaymentsSummary = async (date: string) => {
+    if (!isAuthenticated) return;
+    setLoading(true);
     try {
       const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in to view dashboard data",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      // Today’s summary
+      // Today's summary
       const resToday = await fetch(`${API_BASE_URL}/payments/summary/?date=${date}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!resToday.ok) throw new Error("Failed to fetch today's summary");
+      if (!resToday.ok) {
+        const errorData = await resToday.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to fetch today's summary");
+      }
       const todayData = await resToday.json();
 
-      // Yesterday’s summary
+      // Yesterday's summary
       const yesterdayDate = getYesterday(date);
       const resYesterday = await fetch(`${API_BASE_URL}/payments/summary/?date=${yesterdayDate}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -66,30 +83,59 @@ const Dashboard = () => {
         ordersCount: calculateChange(todayData.orders_count, yesterdayData.orders_count),
         averageOrder: calculateChange(todayData.average_order, yesterdayData.average_order),
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toast({
+        title: "Error loading sales data",
+        description: err.message || "Failed to fetch payment summary. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
   // Fetch Low Stock
   const fetchLowStock = async (date: string) => {
+    if (!isAuthenticated) return;
     try {
       const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) return;
+      
       const res = await fetch(`${API_BASE_URL}/stocks/low-stock-alert/?date=${date}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!res.ok) throw new Error("Failed to fetch low stock data");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to fetch low stock data");
+      }
       const data = await res.json();
       setLowStockItems(data);
-    } catch (err) {
+      
+      // Show warning if there are low stock items
+      if (data.length > 0) {
+        toast({
+          title: "Low Stock Alert",
+          description: `${data.length} item(s) are running low on stock. Please check the stock page.`,
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
       console.error(err);
+      toast({
+        title: "Error loading stock data",
+        description: err.message || "Failed to fetch low stock alerts. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
   useEffect(() => {
-    fetchPaymentsSummary(selectedDate);
-    fetchLowStock(selectedDate);
-  }, [selectedDate]);
+    if (isAuthenticated) {
+      fetchPaymentsSummary(selectedDate);
+      fetchLowStock(selectedDate);
+    }
+  }, [selectedDate, isAuthenticated]);
 
   // Dummy Recent Orders (can be replaced by API)
   const recentOrders = [
@@ -205,6 +251,9 @@ const Dashboard = () => {
             <CardDescription>Items that need restocking soon</CardDescription>
           </CardHeader>
           <CardContent>
+            {lowStockItems.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No low stock items for the selected date.</p>
+            ) : (
             <div className="space-y-4">
               {lowStockItems.map((item, index) => (
                 <div
@@ -229,6 +278,7 @@ const Dashboard = () => {
                 </div>
               ))}
             </div>
+            )}
           </CardContent>
         </Card>
       </div>

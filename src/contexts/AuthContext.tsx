@@ -1,6 +1,7 @@
 // E:\work\Spot\spice-track-hub-98\src\contexts\AuthContext.tsx
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from '@/hooks/use-toast';
 
 interface AuthContextType {
   user: { id: number; username: string; role: string } | null;
@@ -21,8 +22,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const accessToken = localStorage.getItem('accessToken');
     const storedUser = localStorage.getItem('user');
     if (accessToken && storedUser) {
-      setIsAuthenticated(true);
-      setUser(JSON.parse(storedUser));
+      try {
+        const userData = JSON.parse(storedUser);
+        setIsAuthenticated(true);
+        setUser(userData);
+      } catch (error) {
+        // Invalid user data, clear it
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+        toast({
+          title: "Session error",
+          description: "Your session data is invalid. Please sign in again.",
+          variant: "destructive",
+        });
+      }
     }
   }, []);
 
@@ -41,7 +55,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        return { success: false, error: errorData.detail || 'Invalid credentials' };
+        const errorMessage = errorData.detail || 'Invalid credentials';
+        
+        // Show error message
+        toast({
+          title: "Sign in failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        
+        return { success: false, error: errorMessage };
       }
 
       const data = await response.json();
@@ -54,10 +77,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       setIsAuthenticated(true);
       setUser(userData);
+      
+      // Show success message
+      toast({
+        title: "Sign in successful",
+        description: `Welcome back, ${userData.username}! You have been signed in successfully.`,
+      });
+      
       return { success: true };
     } catch (error: any) {
       console.error('Login error:', error);
-      return { success: false, error: error.message || 'Something went wrong' };
+      const errorMessage = error.message || 'Something went wrong. Please check your connection and try again.';
+      
+      // Show error message
+      toast({
+        title: "Sign in failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      
+      return { success: false, error: errorMessage };
     }
   };
 
@@ -95,16 +134,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       localStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
+      
+      // Show session expired message
+      toast({
+        title: "Session expired",
+        description: "Your session has expired. Please sign in again.",
+        variant: "destructive",
+      });
+      
       return false;
     }
   };
 
   const logout = () => {
+    const username = user?.username || 'User';
+    
+    // Clear authentication data
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     setIsAuthenticated(false);
     setUser(null);
+    
+    // Show sign out message
+    toast({
+      title: "Signed out successfully",
+      description: `Goodbye, ${username}! You have been signed out.`,
+    });
+    
     navigate('/login');
   };
 

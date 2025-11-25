@@ -151,7 +151,22 @@ const Products = () => {
 
   const handleAddProduct = async () => {
     if (!formData.name || !formData.price || !formData.category || !formData.stock_type) {
-      toast({ title: "Missing fields", description: "All fields are required", variant: "destructive" });
+      toast({ 
+        title: "Validation Error", 
+        description: "Please fill in all required fields: Name, Price, Category, and Stock Type", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    // Validate price
+    const priceNum = parseFloat(formData.price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast({ 
+        title: "Invalid Price", 
+        description: "Price must be a positive number", 
+        variant: "destructive" 
+      });
       return;
     }
 
@@ -176,7 +191,10 @@ const Products = () => {
       setFormData({ name: "", price: "", category: "", stock_type: "" });
       setSelectedFile(null);
       setIsAddDialogOpen(false);
-      toast({ title: "Product added", description: `${newProduct.name} has been added successfully` });
+      toast({ 
+        title: "Product added successfully", 
+        description: `${newProduct.name} has been added to your product list` 
+      });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -209,7 +227,10 @@ const Products = () => {
       setFormData({ name: "", price: "", category: "", stock_type: "" });
       setSelectedFile(null);
       setIsAddDialogOpen(false);
-      toast({ title: "Product updated", description: `${updatedProduct.name} has been updated successfully` });
+      toast({ 
+        title: "Product updated successfully", 
+        description: `${updatedProduct.name} has been updated in your product list` 
+      });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
@@ -226,10 +247,17 @@ const Products = () => {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!response.ok) throw new Error("Failed to delete product");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to delete product");
+      }
+      const deletedProduct = products.find(p => p.id === productId);
       setProducts(products.filter((p) => p.id !== productId));
       setDailyProducts(dailyProducts.filter((p) => p.id !== productId));
-      toast({ title: "Product deleted", description: "Product has been deleted successfully" });
+      toast({ 
+        title: "Product deleted successfully", 
+        description: deletedProduct ? `${deletedProduct.name} has been removed from your product list` : "Product has been deleted" 
+      });
     } catch (error: any) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {

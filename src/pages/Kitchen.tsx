@@ -108,7 +108,20 @@ const Kitchen = () => {
   // Add consumption
  const addEmployeeConsumption = async () => {
   if (!selectedProduct) {
-    toast({ title: "Error", description: "Select a product", variant: "destructive" });
+    toast({ 
+      title: "Validation Error", 
+      description: "Please select a product before logging consumption", 
+      variant: "destructive" 
+    });
+    return;
+  }
+
+  if (consumptionQuantity <= 0 || !Number.isInteger(consumptionQuantity)) {
+    toast({ 
+      title: "Invalid Quantity", 
+      description: "Quantity must be a positive whole number", 
+      variant: "destructive" 
+    });
     return;
   }
 
@@ -139,10 +152,14 @@ const Kitchen = () => {
     if (!res.ok) throw new Error(data.detail || "Failed to log consumption");
 
     setConsumptions(prev => [data, ...prev]);
+    const productName = products.find(p => p.id === selectedProduct)?.name || "Product";
     setSelectedProduct("");
     setConsumptionQuantity(1);
     setConsumptionNotes("");
-    toast({ title: "Success", description: "Consumption logged!" });
+    toast({ 
+      title: "Consumption logged successfully", 
+      description: `${consumptionQuantity} unit(s) of ${productName} logged successfully` 
+    });
   } catch (err: any) {
     console.error(err);
     toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -163,7 +180,11 @@ const Kitchen = () => {
   // Move order status
   const moveOrder = (orderId: string, newStatus: KitchenOrder['status']) => {
     setOrders(prev => prev.map(order => order.id === orderId ? { ...order, status: newStatus, updatedAt: new Date() } : order));
-    toast({ title: "Order Updated", description: `Order ${orderId} moved to ${newStatus.replace('-', ' ')}` });
+    const statusText = newStatus === 'new' ? 'New Orders' : newStatus === 'in-progress' ? 'In Progress' : 'Done';
+    toast({ 
+      title: "Order status updated", 
+      description: `Order ${orderId} has been moved to ${statusText}` 
+    });
   };
 
   // Priority badge colors

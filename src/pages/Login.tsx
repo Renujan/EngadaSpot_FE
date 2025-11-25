@@ -24,25 +24,37 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
+    // Validation
+    if (!username.trim() || !password.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please enter both username and password.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { success, error } = await login(username, password);
       if (success) {
-        toast({
-          title: 'Welcome back!',
-          description: `Successfully logged in to ${businessInfo.shopName || import.meta.env.VITE_SHOP_NAME}`,
-        });
+        // Success message is shown in AuthContext
         navigate('/');
       } else {
-        toast({
-          title: 'Login failed',
-          description: error || 'Please check your username and password and try again.',
-          variant: 'destructive',
-        });
+        // Error message is shown in AuthContext, but we can add additional context if needed
+        if (error && !error.includes('Invalid credentials')) {
+          toast({
+            title: 'Sign in failed',
+            description: error || 'Please check your username and password and try again.',
+            variant: 'destructive',
+          });
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Additional error handling for unexpected errors
       toast({
-        title: 'Login failed',
-        description: 'Something went wrong. Please try again.',
+        title: 'Sign in error',
+        description: error?.message || 'An unexpected error occurred. Please try again.',
         variant: 'destructive',
       });
     } finally {

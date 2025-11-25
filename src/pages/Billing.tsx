@@ -82,7 +82,7 @@ const Billing = () => {
       });
       setStockData(stockMap);
     } catch (err: any) {
-      toast.error("Payment failed: " + err.message);
+      toast.error("Failed to load products: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -135,7 +135,10 @@ const Billing = () => {
   const total = subtotal + tax;
 
  const handleCreateBill = async () => {
-  if (cart.length === 0) return;
+  if (cart.length === 0) {
+    toast.error("Cart is empty. Please add items before creating a bill.");
+    return;
+  }
 
   const selectedSections = Object.entries(sections)
     .filter(([_, selected]) => selected)
@@ -176,7 +179,24 @@ const Billing = () => {
 };
 
 const handlePay = async () => {
-  if (cart.length === 0) return;
+  if (cart.length === 0) {
+    toast.error("Cart is empty. Please add items before processing payment.");
+    return;
+  }
+
+  // Validate stock availability
+  const stockIssues: string[] = [];
+  cart.forEach((item) => {
+    const availableStock = stockData[item.product.id];
+    if (availableStock !== undefined && availableStock < item.quantity) {
+      stockIssues.push(`${item.product.name}: Only ${availableStock} available, but ${item.quantity} requested`);
+    }
+  });
+
+  if (stockIssues.length > 0) {
+    toast.error(`Insufficient stock: ${stockIssues.join("; ")}`);
+    return;
+  }
 
   try {
     const accessToken = localStorage.getItem("accessToken");
